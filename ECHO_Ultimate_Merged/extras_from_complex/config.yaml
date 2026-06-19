@@ -1,0 +1,69 @@
+project:
+  name: ECHO
+  version: 2.0.0
+
+models:
+  general_light: "${OLLAMA_MODEL_GENERAL_LIGHT}"
+  general_heavy: "${OLLAMA_MODEL_GENERAL_HEAVY}"
+  code_light: "${OLLAMA_MODEL_CODE_LIGHT}"
+  code_heavy: "${OLLAMA_MODEL_CODE_HEAVY}"
+  default: general_light
+
+routing:
+  max_context_tokens: 8192
+  code_keywords:
+    - código
+    - code
+    - function
+    - função
+    - script
+    - debug
+    - algoritmo
+    - parser
+    - compiler
+    - thread
+    - socket
+    - regex
+    - json
+    - xml
+    - yaml
+  heavy_general_keywords:
+    - explique
+    - detalhe
+    - teoria
+    - por que
+    - como funciona
+    - significado
+
+tools:
+  web_search: true
+  web_fetch: true
+  filesystem: true
+  terminal: true
+  process_monitor: true
+  archive: true
+  hash: true
+  report: true
+  convert: true
+  knowledge_base: true
+  plugin_manager: true
+
+storage:
+  session_dir: ./data/sessions
+  kb_dir: ./data/kb
+  plugins_dir: ./plugins
+  db_path: ./data/echo.db
+
+logging:
+  level: INFO
+  path: ./logs/echo.log
+  json: false
+
+permissions:
+  terminal: safe
+  filesystem: safe
+  network: limited
+
+api:
+  host: 127.0.0.1
+  port: 8080

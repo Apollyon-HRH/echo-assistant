@@ -1,0 +1,15 @@
+requests>=2.31.0
+PyYAML>=6.0.1
+python-dotenv>=1.0.1
+rich>=13.7.1
+prompt_toolkit>=3.0.48
+psutil>=5.9.8
+Pillow>=10.4.0
+beautifulsoup4>=4.12.3
+lxml>=5.2.2
+feedparser>=6.0.11
+duckduckgo_search>=6.2.13
+python-dateutil>=2.9.0.post0
+pytesseract>=0.3.13
+pyttsx3>=2.98
+python-telegram-bot>=21.4
