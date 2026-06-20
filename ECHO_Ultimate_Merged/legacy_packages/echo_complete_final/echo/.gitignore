@@ -1,8 +1,0 @@
-__pycache__/
-*.pyc
-logs/
-sessions/
-temp/
-memory/calendar.json
-*.zip
-.env
