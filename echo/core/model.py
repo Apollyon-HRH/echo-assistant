@@ -6,6 +6,7 @@ fallback, streaming, otimização de contexto e descarregamento automático.
 import json
 import requests
 import time
+import subprocess
 from typing import Generator, Optional, List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from core.logger import get_logger
@@ -54,15 +55,39 @@ class ModelManager:
         return self.current_model_name
 
     def _unload_model(self, model_tag: str) -> None:
-        """Descarrega o modelo da VRAM via API do Ollama."""
+        """
+        Descarrega o modelo da VRAM usando o comando 'ollama stop'.
+        Isso é mais confiável do que a API /stop, que pode não existir em todas as versões.
+        """
+        # Método 1: via subprocess (recomendado)
+        try:
+            result = subprocess.run(
+                ["ollama", "stop", model_tag],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.debug(f"Modelo {model_tag} descarregado via ollama stop.")
+                return
+            else:
+                logger.warning(f"ollama stop falhou para {model_tag}: {result.stderr}")
+        except FileNotFoundError:
+            logger.warning("Comando 'ollama' não encontrado. Tentando API HTTP...")
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Timeout ao descarregar {model_tag} via subprocess.")
+        except Exception as e:
+            logger.warning(f"Erro ao descarregar {model_tag} via subprocess: {e}")
+
+        # Método 2: fallback via API HTTP (caso o subprocess falhe)
         try:
             resp = requests.post(OLLAMA_STOP_URL, json={"model": model_tag}, timeout=5)
             if resp.status_code == 200:
-                logger.debug(f"Modelo {model_tag} descarregado.")
+                logger.debug(f"Modelo {model_tag} descarregado via API.")
             else:
-                logger.warning(f"Falha ao descarregar {model_tag}: {resp.text}")
+                logger.warning(f"Falha ao descarregar {model_tag} via API: {resp.text}")
         except Exception as e:
-            logger.warning(f"Erro ao descarregar {model_tag}: {e}")
+            logger.warning(f"Erro ao descarregar {model_tag} via API: {e}")
 
     def _detect_model(self, prompt: str) -> str:
         """Detecta automaticamente qual modelo usar baseado no prompt."""
@@ -129,7 +154,7 @@ class ModelManager:
             "stream": stream,
             "options": {
                 "num_ctx": self.context_length,
-                "temperature": 0.2,  # baixo para respostas mais determinísticas
+                "temperature": 0.2,
                 "top_p": 0.9,
                 "repeat_penalty": 1.1,
                 "stop": ["\nSystem:", "\nUser:"]
@@ -151,10 +176,8 @@ class ModelManager:
                                 yield chunk
                         except json.JSONDecodeError:
                             continue
-                # Adiciona ao histórico após completar
                 self.history.append({"role": "user", "content": prompt})
                 self.history.append({"role": "assistant", "content": full_response})
-                # Trunca histórico se necessário
                 self._truncate_history()
             else:
                 response = requests.post(OLLAMA_API_URL, json=payload, timeout=180)
@@ -173,7 +196,6 @@ class ModelManager:
             yield "Erro: Ollama não está em execução. Execute 'ollama serve'."
         except Exception as e:
             logger.error(f"Erro na chamada ao Ollama: {e}")
-            # Fallback para modelo leve
             if model_key != "geral_leve" and "codigo_leve" in self.models:
                 logger.warning("Tentando fallback para modelo leve...")
                 yield from self.ask(prompt, stream, force_model="geral_leve")
@@ -181,33 +203,27 @@ class ModelManager:
                 yield f"Erro: {str(e)}"
 
     def ask_sync(self, prompt: str, force_model: Optional[str] = None) -> str:
-        """Versão síncrona (sem streaming) para uso em ferramentas."""
         result = ""
         for chunk in self.ask(prompt, stream=False, force_model=force_model):
             result += chunk
         return result
 
     def _truncate_history(self):
-        """Trunca o histórico para não exceder max_tokens (estimativa 4 chars/token)."""
         max_chars = self.context_length * 4
         total = sum(len(msg["content"]) for msg in self.history)
         while total > max_chars and len(self.history) > 2:
-            # Remove a mensagem mais antiga (exceto a primeira do sistema)
             removed = self.history.pop(1) if self.history[0]["role"] == "system" else self.history.pop(0)
             total -= len(removed["content"])
             logger.debug(f"Histórico truncado: removida mensagem de {removed['role']}")
 
     def reset_history(self):
-        """Reseta o histórico da conversa."""
         self.history = []
         logger.info("Histórico resetado.")
 
     def get_current_model(self) -> str:
-        """Retorna o nome do modelo atual."""
         return self.current_model_name
 
     def get_context_usage(self) -> Dict[str, Any]:
-        """Retorna estatísticas do contexto atual."""
         total_chars = sum(len(msg["content"]) for msg in self.history)
         estimated_tokens = total_chars // 4
         return {
